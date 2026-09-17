@@ -30,9 +30,9 @@ export default async (req, res) => {
   }
 
   const token = process.env.PAT_1;
-  const ghRes = await fetch(`https://api.github.com/repos/${repo}`, {
-    headers: token ? { Authorization: `token ${token}` } : {},
-  });
+  const headers = token ? { Authorization: `token ${token}` } : {};
+
+  const ghRes = await fetch(`https://api.github.com/repos/${repo}`, { headers });
 
   if (!ghRes.ok) {
     res.setHeader("Content-Type", "text/plain");
@@ -41,7 +41,21 @@ export default async (req, res) => {
   }
 
   const data = await ghRes.json();
-  const branch = data.default_branch;
+  let branch = data.default_branch;
+
+  try {
+    const eventsRes = await fetch(`https://api.github.com/repos/${repo}/events?per_page=30`, { headers });
+    if (eventsRes.ok) {
+      const events = await eventsRes.json();
+      const lastPush = events.find((e) => e.type === "PushEvent");
+      if (lastPush?.payload?.ref) {
+        branch = lastPush.payload.ref.replace(/^refs\/heads\//, "");
+      }
+    }
+  } catch {
+    // keep default_branch fallback
+  }
+
   const when = relativeTime(data.pushed_at);
   const text = `↻ ${repo} — pushé ${when}, sur ${branch}`;
 
