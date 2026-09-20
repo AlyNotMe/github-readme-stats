@@ -19,9 +19,53 @@ const escapeXml = (s) =>
     ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c])
   );
 
+const renderSvg = (res, { bg_color, text_color, accent_color, prefix, accentText, suffix }) => {
+  const fullText = `${prefix}${accentText}${suffix}`;
+  const charWidth = 7.1;
+  const width = Math.round(fullText.length * charWidth) + 20;
+  const height = 24;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" role="img" aria-label="${escapeXml(fullText)}">
+  <rect width="100%" height="100%" fill="#${bg_color}" rx="4"/>
+  <text x="10" y="16" font-family="Segoe UI, Ubuntu, Sans-Serif" font-size="13" fill="#${text_color}">${escapeXml(prefix)}<tspan fill="#${accent_color}">${escapeXml(accentText)}</tspan>${escapeXml(suffix)}</text>
+</svg>`;
+
+  res.setHeader("Content-Type", "image/svg+xml");
+  res.setHeader("Cache-Control", "max-age=300, s-maxage=300");
+  res.status(200).send(svg);
+};
+
 // @ts-ignore
 export default async (req, res) => {
-  const { repo, bg_color = "ffffff", text_color = "333333", accent_color = "0969da" } = req.query;
+  const {
+    repo,
+    pr_repo,
+    pr_title,
+    pr_date,
+    pr_state,
+    bg_color = "ffffff",
+    text_color = "333333",
+    accent_color = "0969da",
+  } = req.query;
+
+  if (pr_repo) {
+    if (!pr_date || !pr_title) {
+      res.setHeader("Content-Type", "text/plain");
+      res.status(400).send("Missing pr_date or pr_title");
+      return;
+    }
+    const when = relativeTime(pr_date);
+    const stateLabel = pr_state === "open" ? "PR ouverte" : "PR mergée";
+    renderSvg(res, {
+      bg_color,
+      text_color,
+      accent_color,
+      prefix: `🔀 ${stateLabel} sur `,
+      accentText: pr_repo,
+      suffix: ` — ${pr_title}, ${when}`,
+    });
+    return;
+  }
 
   if (!repo || !repo.includes("/")) {
     res.setHeader("Content-Type", "text/plain");
@@ -57,18 +101,12 @@ export default async (req, res) => {
   }
 
   const when = relativeTime(data.pushed_at);
-  const text = `↻ ${repo} — pushé ${when}, sur ${branch}`;
-
-  const charWidth = 7.1;
-  const width = Math.round(text.length * charWidth) + 20;
-  const height = 24;
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" role="img" aria-label="${escapeXml(text)}">
-  <rect width="100%" height="100%" fill="#${bg_color}" rx="4"/>
-  <text x="10" y="16" font-family="Segoe UI, Ubuntu, Sans-Serif" font-size="13" fill="#${text_color}">${escapeXml(`↻ ${repo} — pushé ${when}, sur `)}<tspan fill="#${accent_color}">${escapeXml(branch)}</tspan></text>
-</svg>`;
-
-  res.setHeader("Content-Type", "image/svg+xml");
-  res.setHeader("Cache-Control", "max-age=300, s-maxage=300");
-  res.status(200).send(svg);
+  renderSvg(res, {
+    bg_color,
+    text_color,
+    accent_color,
+    prefix: `↻ ${repo} — pushé ${when}, sur `,
+    accentText: branch,
+    suffix: "",
+  });
 };
